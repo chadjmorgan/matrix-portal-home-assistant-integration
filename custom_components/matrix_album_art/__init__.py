@@ -99,10 +99,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     @callback
     def async_bind_player_listener(entity_id: str):
         """Binds a native event state change listener to a single chosen media player."""
+        # Cleanly tear down any prior entity listener safely
         if TRACKER_DATA_KEY in hass.data.get(entry.entry_id, {}):
-            hass.data[entry.entry_id][TRACKER_DATA_KEY]()
+            try:
+                hass.data[entry.entry_id][TRACKER_DATA_KEY]()
+            except ValueError:
+                # Catch instances where HA already cleaned up or dropped the listener slot
+                _LOGGER.debug("Matrix: Previous tracking listener wrapper already released by core.")
+            except Exception as e:
+                _LOGGER.error(f"Matrix: Unexpected cleanup error: {e}")
             
         _LOGGER.warning(f"Matrix now actively tracking state adjustments for: {entity_id}")
+
 
         async def async_state_changed_listener(event: Event):
             new_state = event.data.get("new_state")
