@@ -27,7 +27,6 @@ class MatrixConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(user_input["mqtt_broker"])
             self._abort_if_unique_id_configured()
 
-            # Pass the initial setup values straight into the entry
             return self.async_create_entry(
                 title=f"Matrix Display ({user_input['mqtt_broker']})",
                 data=user_input,
@@ -55,20 +54,20 @@ class MatrixOptionsFlowHandler(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
+        # Use super() to let Home Assistant safely assign the config_entry property natively
+        super().__init__(config_entry)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Manage the configuration modifications requested by the user."""
         if user_input is not None:
-            # Crucial: Merge your data dictionaries together so Home Assistant
-            # doesn't lose your baseline data keys on saving.
+            # Sync options flow alterations with the base configuration entry dictionary
             new_data = {**self.config_entry.data, **user_input}
             self.hass.config_entries.async_update_entry(self.config_entry, data=new_data)
             return self.async_create_entry(title="", data=user_input)
 
-        # Pull existing parameters safely by falling back to the baseline data schema
+        # Safely pull the active parameters from config_entry properties
         current_broker = self.config_entry.options.get(
             "mqtt_broker", self.config_entry.data.get("mqtt_broker", "")
         )
@@ -76,7 +75,6 @@ class MatrixOptionsFlowHandler(config_entries.OptionsFlow):
             "mqtt_topic", self.config_entry.data.get("mqtt_topic", "appletv/matrix/album_art")
         )
 
-        # Render the form safely with valid string fallbacks
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
