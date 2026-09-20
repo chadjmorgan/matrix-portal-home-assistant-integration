@@ -4,7 +4,7 @@
   "codeowners": ["@cjmchad"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://chadjmorgan.com",
+  "documentation": "https://github.com/chadjmorgan/matrix-portal-home-assistant-integration/blob/main/README.md",
   "iot_class": "local_push",
   "requirements": ["pillow==10.3.0", "paho-mqtt==1.6.1"],
   "version": "1.0.0"

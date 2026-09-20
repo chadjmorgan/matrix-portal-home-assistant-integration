@@ -14,13 +14,13 @@ The official Home Assistant companion integration for your pixel matrix display.
 
 ## 🛠️ Step 1: Installation via HACS
 
-Because this companion integration is hosted on GitLab, you can install it seamlessly by adding it as a Custom Repository inside the **Home Assistant Community Store (HACS)**:
+Because this companion integration is hosted on GitHub, you can install it seamlessly by adding it as a Custom Repository inside the **Home Assistant Community Store (HACS)**:
 
 1. Open your **Home Assistant** instance.
 2. Click on **HACS** in your sidebar.
 3. Click the **three dots (⋮)** in the top right-hand corner and select **Custom repositories**.
-4. Paste the URL of this GitLab repository into the **Repository** field:
-   `https://gitlab.com/cjmchad/matrix-portal-home-assistant-integration.git`
+4. Paste the URL of this GitHub repository into the **Repository** field:
+   `https://github.com/chadjmorgan/matrix-portal-home-assistant-integration.git`
 5. Change the **Category** dropdown menu to **Integration**.
 6. Click **Add**, then click **Download** on the newly discovered card.
 7. **Restart Home Assistant** to activate the plugin files.
@@ -50,7 +50,7 @@ Skip writing YAML or manual routines. Import our pre-configured automation scrip
 ### Manual Blueprint Setup (Alternative)
 If the button above does not load, you can import it by going to **Settings** ➡️ **Automations & Scenes** ➡️ **Blueprints** ➡️ **Import Blueprint** and pasting this raw file path:
 ```text
-https://gitlab.com/cjmchad/matrix-portal-home-assistant-integration/-/raw/main/blueprints/automation/matrix_album_art_sync.yaml
+https://raw.githubusercontent.com/chadjmorgan/matrix-portal-home-assistant-integration/31c5317eecc94de0cd2b2db36e8180d677d4e0d0/blueprints/automation/matrix_album_art_sync.yaml
 ```
 
 Once imported, click **Create Automation**, pick your target **Media Player** (e.g., Apple TV) from the visual dropdown menu, and hit save!
