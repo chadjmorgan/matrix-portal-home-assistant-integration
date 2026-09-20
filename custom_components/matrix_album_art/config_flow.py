@@ -1,4 +1,4 @@
-"""Config flow for Your Product companion integration."""
+"""Config flow for Matrix Album Art integration."""
 from __future__ import annotations
 
 import logging

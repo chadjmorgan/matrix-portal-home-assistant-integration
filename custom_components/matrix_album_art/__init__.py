@@ -2,11 +2,11 @@
 import io
 import logging
 import asyncio
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-# Using HA's native asyncio-friendly dependencies instead of standard requests/paho blocking loops
 import aiohttp
 from PIL import Image
 import paho.mqtt.publish as publish
