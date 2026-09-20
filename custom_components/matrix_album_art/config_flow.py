@@ -24,18 +24,11 @@ class MatrixConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle the initial setup step when adding the integration."""
         if user_input is not None:
-            await self.async_set_unique_id(user_input["mqtt_broker"])
-            self._abort_if_unique_id_configured()
-
-            return self.async_create_entry(
-                title=f"Matrix Display ({user_input['mqtt_broker']})",
-                data=user_input,
-            )
+            return self.async_create_entry(title="Matrix Companion", data=user_input)
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
-                vol.Required("mqtt_broker"): str,
                 vol.Optional("mqtt_topic", default="appletv/matrix/album_art"): str,
             })
         )
@@ -61,8 +54,6 @@ class MatrixOptionsFlowHandler(config_entries.OptionsFlow):
             self.hass.config_entries.async_update_entry(self.config_entry, data=new_data)
             return self.async_create_entry(title="", data=user_input)
 
-        # Pull existing parameters safely with fallback defaults
-        current_broker = self.config_entry.options.get("mqtt_broker", self.config_entry.data.get("mqtt_broker", ""))
         current_topic = self.config_entry.options.get("mqtt_topic", self.config_entry.data.get("mqtt_topic", "appletv/matrix/album_art"))
         current_saturation = self.config_entry.options.get("color_saturation", self.config_entry.data.get("color_saturation", 1.0))
         current_contrast = self.config_entry.options.get("contrast", self.config_entry.data.get("contrast", 1.0))
@@ -71,7 +62,6 @@ class MatrixOptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
-                vol.Required("mqtt_broker", default=str(current_broker)): str,
                 vol.Required("mqtt_topic", default=str(current_topic)): str,
                 vol.Optional("color_saturation", default=float(current_saturation)): vol.Coerce(float),
                 vol.Optional("contrast", default=float(current_contrast)): vol.Coerce(float),

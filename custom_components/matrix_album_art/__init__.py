@@ -1,20 +1,18 @@
-"""Companion integration to dynamically track an active media player from MQTT."""
+"""Companion integration to handle image conversions and device listings natively via HA MQTT."""
 from __future__ import annotations
 
 import io
+import json
 import logging
 import asyncio
-from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall, Event, callback
+from homeassistant.core import HomeAssistant, Event, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.components import mqtt as ha_mqtt
 
-import aiohttp
-from PIL import Image, ImageEnhance  # Added ImageEnhance
-
+from PIL import Image, ImageEnhance
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -25,20 +23,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up the integration from a UI config entry."""
     
     if "mqtt" not in hass.config.components:
-        _LOGGER.error("Matrix failure: Core Home Assistant MQTT integration is missing or unconfigured. Please add it first via Settings -> Devices & Services.")
+        _LOGGER.error("Matrix failure: Core Home Assistant MQTT integration is not configured.")
         return False
-    
-    mqtt_broker = entry.options.get("mqtt_broker", entry.data.get("mqtt_broker"))
-    mqtt_topic = entry.options.get("mqtt_topic", entry.data.get("mqtt_topic", "appletv/matrix/album_art"))
-    control_topic = "matrix-portal/marquee/source"
 
-    # Grab the ImageEnhance multipliers dynamically from user settings
+    # Pull user options or configurations dynamically
+    mqtt_topic = entry.options.get("mqtt_topic", entry.data.get("mqtt_topic", "appletv/matrix/album_art"))
+    
     val_saturation = entry.options.get("color_saturation", entry.data.get("color_saturation", 1.0))
     val_contrast = entry.options.get("contrast", entry.data.get("contrast", 1.0))
     val_brightness = entry.options.get("brightness", entry.data.get("brightness", 1.0))
 
+    # Static control topic rules
+    control_topic = "matrix-portal/marquee/source"
+    get_atvs_topic = "matrix-portal/marquee/get-atvs"
+    reply_atvs_topic = "matrix-portal/marquee/available-atvs"
+
     async def async_process_and_send(image_path: str):
-        """Processes the extracted image path, resizes it, and sends it via MQTT."""
+        """Processes the extracted image path, resizes it, and sends it via native MQTT."""
         if not image_path:
             return
 
@@ -53,9 +54,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if "{w}" in full_url or "{h}" in full_url:
             full_url = full_url.replace("{w}", "32").replace("{h}", "32").replace("{c}", "").replace("{f}", "png")
 
-        _LOGGER.debug(f"Matrix pushing download request: {full_url}")
         session = async_get_clientsession(hass, verify_ssl=False)
-        headers = {"X-HA-Internal-Request": "1"} if "127.0.0.1" in full_url or "localhost" in full_url or "api/media_player_proxy" in full_url else {}
+        headers = {"X-HA-Internal-Request": "1"} if "api/media_player_proxy" in full_url else {}
 
         try:
             async with asyncio.timeout(10):
@@ -66,8 +66,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             def process_image() -> bytes:
                 img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-                
-                # Apply the UI multipliers dynamically
                 if val_saturation != 1.0:
                     img = ImageEnhance.Color(img).enhance(val_saturation)
                 if val_contrast != 1.0:
@@ -75,8 +73,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 if val_brightness != 1.0:
                     img = ImageEnhance.Brightness(img).enhance(val_brightness)
 
-                # Resize to target output matrix constraints
-                img = img.resize((32, 32), Image.Resampling.NEAREST)
+                img = img.resize((32, 32), Image.Resampling.LANCZOS)
                 
                 rgb565_bytes = bytearray()
                 for y in range(32):
@@ -92,11 +89,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             payload_bytes = await hass.async_add_executor_job(process_image)
 
+            # Publish natively using Home Assistant's single core persistent broker connection
             await ha_mqtt.async_publish(hass, mqtt_topic, payload_bytes, qos=0, retain=False)
-            _LOGGER.warning(f"Matrix SUCCESS: Published {len(payload_bytes)} bytes natively via Home Assistant MQTT!")
-
-            await hass.async_add_executor_job(mqtt_publish_worker)
-            _LOGGER.warning(f"Matrix Stream Success! {len(payload_bytes)} bytes sent.")
+            _LOGGER.debug(f"Matrix Success: Published {len(payload_bytes)} bytes natively via HA.")
 
         except Exception as e:
             _LOGGER.error(f"Matrix engine error: {e}")
@@ -107,10 +102,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if TRACKER_DATA_KEY in hass.data.get(entry.entry_id, {}):
             hass.data[entry.entry_id][TRACKER_DATA_KEY]()
             
-        _LOGGER.warning(f"Matrix Matrix now actively tracking state adjustments for: {entity_id}")
+        _LOGGER.warning(f"Matrix now actively tracking state adjustments for: {entity_id}")
 
         async def async_state_changed_listener(event: Event):
-            """Triggers instantly whenever the chosen player updates."""
             new_state = event.data.get("new_state")
             if not new_state:
                 return
@@ -128,26 +122,42 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if current_state and current_state.attributes.get("entity_picture"):
             hass.async_create_task(async_process_and_send(current_state.attributes.get("entity_picture")))
 
+    # --- 🛰️ ROUTINE 1: ACTIVE PLAYER TOPIC INTAKE ---
     async def async_mqtt_message_handler(msg: ha_mqtt.ReceiveMessage):
-        """Fires whenever your matrix control topic receives an input."""
         raw_payload = msg.payload.strip()
-        
         if not raw_payload.startswith("media_player."):
             target_player_id = f"media_player.{raw_payload}"
         else:
             target_player_id = raw_payload
             
-        if not target_player_id.replace("media_player.", "").isalnum:
-            _LOGGER.error(f"Matrix rejection: '{raw_payload}' contains invalid entity characters.")
-            return
-        
         async_bind_player_listener(target_player_id)
 
-    try:
-        await ha_mqtt.async_subscribe(hass, control_topic, async_mqtt_message_handler)
-        _LOGGER.warning(f"Matrix engine successfully subscribed to control topic: {control_topic}")
-    except Exception as e:
-        _LOGGER.error(f"Could not hook MQTT subscription! Error: {e}")
+    # --- 📋 ROUTINE 2: GENERATE AND REPLY AVAILABLE APPLETVS ---
+    async def async_mqtt_get_players_handler(msg: ha_mqtt.ReceiveMessage):
+        """Finds all media players in the system and responds over MQTT with a JSON list."""
+        _LOGGER.info("Matrix received request for available media players.")
+        
+        available_players = {}
+        # Fetch all live entity states from the core engine registry
+        all_states = hass.states.async_all()
+        
+        for state in all_states:
+            # Look for entities in the media_player domain
+            if state.entity_id.startswith("media_player."):
+                slug = state.entity_id.split(".")[1]
+                friendly_name = state.attributes.get("friendly_name", slug)
+                available_players[slug] = friendly_name
+
+        # Encode dict directly to a compact string
+        json_payload = json.dumps(available_players)
+        
+        # Publish the results back out to your matrix display panel hardware natively
+        await ha_mqtt.async_publish(hass, reply_atvs_topic, json_payload, qos=0, retain=True)
+        _LOGGER.debug(f"Matrix reply dispatched to {reply_atvs_topic}: {json_payload}")
+
+    # Bind both topic hooks cleanly using the native loop pipeline
+    await ha_mqtt.async_subscribe(hass, control_topic, async_mqtt_message_handler)
+    await ha_mqtt.async_subscribe(hass, get_atvs_topic, async_mqtt_get_players_handler)
 
     entry.async_on_unload(entry.add_update_listener(async_update_listener))
     return True
