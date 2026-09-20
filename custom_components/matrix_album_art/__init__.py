@@ -1,4 +1,6 @@
 """Companion integration to convert and stream album art to an MQTT Matrix."""
+from __future__ import annotations
+
 import io
 import logging
 import asyncio
@@ -9,7 +11,6 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import aiohttp
 from PIL import Image
 import paho.mqtt.publish as publish
-# Import the explicit Callback API version required by Paho MQTT v2.x
 import paho.mqtt.client as mqtt
 
 from .const import DOMAIN
@@ -19,8 +20,9 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up the integration from a UI config entry."""
     
-    mqtt_broker = entry.data.get("mqtt_broker")
-    mqtt_topic = entry.data.get("mqtt_topic", "appletv/matrix/album_art")
+    # Check options first (updated via Options Flow), fallback to initial setup data
+    mqtt_broker = entry.options.get("mqtt_broker", entry.data.get("mqtt_broker"))
+    mqtt_topic = entry.options.get("mqtt_topic", entry.data.get("mqtt_topic", "appletv/matrix/album_art"))
 
     async def async_send_album_art(call: ServiceCall):
         """The native Home Assistant action executed via automations."""
@@ -35,7 +37,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         elif image_path.startswith("http"):
             full_url = image_path
         else:
-            # Fallback to Home Assistant's preferred internal/loopback network configurations
+            # Fallback to Home Assistant's preferred internal network configurations
             base_url = hass.config.internal_url or "http://localhost:8123"
             full_url = f"{base_url.rstrip('/')}/{image_path.lstrip('/')}"
             
@@ -50,9 +52,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         session = async_get_clientsession(hass, verify_ssl=False)
         headers = {}
         
-        # Bypass OAuth validation entirely for local media components by generating a temporary system token
+        # Bypass validation flags for internal loopback resources
         if "api/media_player_proxy" in full_url or "localhost" in full_url or "127.0.0.1" in full_url:
-            # Use HA's internal refreshing long-lived token generator context if available
             headers["X-HA-Internal-Request"] = "1"
 
         try:
@@ -63,8 +64,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         return
                     image_bytes = await response.read()
 
-            # 4. SCALE AND CONVERT TO 16-BIT RGB565 BYTES
-            def process_image():
+            # 4. SCALE AND CONVERT TO 16-BIT RGB565 BYTES (Handled on separate worker thread)
+            def process_image() -> bytes:
                 img = Image.open(io.BytesIO(image_bytes))
                 img = img.convert("RGB")
                 img = img.resize((32, 32), Image.Resampling.LANCZOS)
@@ -88,7 +89,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             # 5. STREAM TO MQTT BROKER (With explicit MQTT v2 compatibility mapping)
             def mqtt_publish_worker():
-                # Explicitly pass protocol variable to prevent Paho v2.x silent drops
                 publish.single(
                     topic=mqtt_topic,
                     payload=payload_bytes,
@@ -100,16 +100,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 )
 
             await hass.async_add_executor_job(mqtt_publish_worker)
-            _LOGGER.warning(f"Matrix SUCCESS: Published {len(payload_bytes)} bytes to {mqtt_topic}!")
+            _LOGGER.warning(f"Matrix SUCCESS: Published {len(payload_bytes)} bytes to topic '{mqtt_topic}' via broker '{mqtt_broker}'!")
 
         except Exception as e:
             _LOGGER.error(f"Matrix critical failure: {e}", exc_info=True)
 
     # Register the function as a native action/service
     hass.services.async_register(DOMAIN, "send_album_art", async_send_album_art)
+    
+    # Listen for live profile configuration updates via the "Configure" UI button
+    entry.async_on_unload(entry.add_to_updates_tracker(async_update_listener))
+    
     return True
 
+async def async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle options update by reloading the integration instantly."""
+    await hass.config_entries.async_reload(entry.entry_id)
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload integration entry."""
+    """Unload integration entry cleanly if deleted or reloaded."""
     hass.services.async_remove(DOMAIN, "send_album_art")
     return True
