@@ -109,7 +109,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_register(DOMAIN, "send_album_art", async_send_album_art)
     
     # Listen for live profile configuration updates via the "Configure" UI button
-    entry.async_on_unload(entry.add_to_updates_tracker(async_update_listener))
+    entry.async_on_unload(entry.add_on_update_listener(async_update_listener))
     
     return True
 
