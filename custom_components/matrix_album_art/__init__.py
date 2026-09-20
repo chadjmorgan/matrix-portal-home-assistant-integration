@@ -28,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     mqtt_broker = entry.options.get("mqtt_broker", entry.data.get("mqtt_broker"))
     mqtt_topic = entry.options.get("mqtt_topic", entry.data.get("mqtt_topic", "appletv/matrix/album_art"))
-    control_topic = "appletv/matrix/active_player"
+    control_topic = "matrix-portal/marquee/source"
 
     # Grab the ImageEnhance multipliers dynamically from user settings
     val_saturation = entry.options.get("color_saturation", entry.data.get("color_saturation", 1.0))
