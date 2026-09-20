@@ -1,4 +1,4 @@
-"""Companion integration to handle image conversions and device listings natively via HA MQTT."""
+"""Companion integration to handle image conversions, listings, and metadata extraction via MQTT."""
 from __future__ import annotations
 
 import io
@@ -26,17 +26,38 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.error("Matrix failure: Core Home Assistant MQTT integration is not configured.")
         return False
 
-    # Pull user options or configurations dynamically
     mqtt_topic = entry.options.get("mqtt_topic", entry.data.get("mqtt_topic", "appletv/matrix/album_art"))
     
     val_saturation = entry.options.get("color_saturation", entry.data.get("color_saturation", 1.0))
     val_contrast = entry.options.get("contrast", entry.data.get("contrast", 1.0))
     val_brightness = entry.options.get("brightness", entry.data.get("brightness", 1.0))
 
-    # Static control topic rules
+    # Universal Topic Map
     control_topic = "matrix-portal/marquee/source"
+    metadata_topic = "matrix-portal/marquee/atv"
     get_atvs_topic = "matrix-portal/marquee/get-atvs"
     reply_atvs_topic = "matrix-portal/marquee/available-atvs"
+
+    @callback
+    def async_publish_metadata(entity_id: str):
+        """Compiles media player state metadata parameters and fires them natively into MQTT."""
+        state_obj = hass.states.get(entity_id)
+        if not state_obj:
+            return
+
+        metadata_payload = {
+            "state": state_obj.state,
+            "app_name": state_obj.attributes.get("app_name", "None"),
+            "title": state_obj.attributes.get("media_title", "None"),
+            "artist": state_obj.attributes.get("media_artist", "None"),
+            "album": state_obj.attributes.get("media_album", "None")
+        }
+        
+        # Dispatch metadata asynchronously
+        hass.async_create_task(
+            ha_mqtt.async_publish(hass, metadata_topic, json.dumps(metadata_payload), qos=0, retain=True)
+        )
+        _LOGGER.debug(f"Matrix Metadata updated: {metadata_payload}")
 
     async def async_process_and_send(image_path: str):
         """Processes the extracted image path, resizes it, and sends it via native MQTT."""
@@ -88,10 +109,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 return bytes(rgb565_bytes)
 
             payload_bytes = await hass.async_add_executor_job(process_image)
-
-            # Publish natively using Home Assistant's single core persistent broker connection
             await ha_mqtt.async_publish(hass, mqtt_topic, payload_bytes, qos=0, retain=False)
-            _LOGGER.debug(f"Matrix Success: Published {len(payload_bytes)} bytes natively via HA.")
 
         except Exception as e:
             _LOGGER.error(f"Matrix engine error: {e}")
@@ -99,23 +117,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     @callback
     def async_bind_player_listener(entity_id: str):
         """Binds a native event state change listener to a single chosen media player."""
-        # Cleanly tear down any prior entity listener safely
         if TRACKER_DATA_KEY in hass.data.get(entry.entry_id, {}):
             try:
                 hass.data[entry.entry_id][TRACKER_DATA_KEY]()
             except ValueError:
-                # Catch instances where HA already cleaned up or dropped the listener slot
-                _LOGGER.debug("Matrix: Previous tracking listener wrapper already released by core.")
+                _LOGGER.debug("Matrix: Previous tracking listener already released by core engine.")
             except Exception as e:
-                _LOGGER.error(f"Matrix: Unexpected cleanup error: {e}")
+                _LOGGER.error(f"Matrix tracking cancellation error: {e}")
             
         _LOGGER.warning(f"Matrix now actively tracking state adjustments for: {entity_id}")
-
 
         async def async_state_changed_listener(event: Event):
             new_state = event.data.get("new_state")
             if not new_state:
                 return
+            
+            # Fire data packet on ANY track state adjustment (Automation 1 alternative)
+            async_publish_metadata(entity_id)
+
             img_path = new_state.attributes.get("entity_picture")
             if img_path:
                 await async_process_and_send(img_path)
@@ -126,44 +145,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.data[entry.entry_id] = {}
         hass.data[entry.entry_id][TRACKER_DATA_KEY] = unsub_func
 
+        # Immediately execute state dumps and image scans upon source changes (Automation 2 alternative)
+        async_publish_metadata(entity_id)
         current_state = hass.states.get(entity_id)
         if current_state and current_state.attributes.get("entity_picture"):
             hass.async_create_task(async_process_and_send(current_state.attributes.get("entity_picture")))
 
-    # --- 🛰️ ROUTINE 1: ACTIVE PLAYER TOPIC INTAKE ---
+    # --- ROUTINE 1: ACTIVE PLAYER CHANGED TOPIC INTAKE ---
     async def async_mqtt_message_handler(msg: ha_mqtt.ReceiveMessage):
         raw_payload = msg.payload.strip()
+        
         if not raw_payload.startswith("media_player."):
             target_player_id = f"media_player.{raw_payload}"
         else:
             target_player_id = raw_payload
             
+        if not target_player_id.replace("media_player.", "").isalnum:
+            return
+        
         async_bind_player_listener(target_player_id)
 
-    # --- 📋 ROUTINE 2: GENERATE AND REPLY AVAILABLE APPLETVS ---
+    # --- ROUTINE 2: GENERATE AND REPLY AVAILABLE APPLETVS ---
     async def async_mqtt_get_players_handler(msg: ha_mqtt.ReceiveMessage):
-        """Finds all media players in the system and responds over MQTT with a JSON list."""
-        _LOGGER.info("Matrix received request for available media players.")
-        
         available_players = {}
-        # Fetch all live entity states from the core engine registry
         all_states = hass.states.async_all()
         
         for state in all_states:
-            # Look for entities in the media_player domain
             if state.entity_id.startswith("media_player."):
                 slug = state.entity_id.split(".")[1]
                 friendly_name = state.attributes.get("friendly_name", slug)
                 available_players[slug] = friendly_name
 
-        # Encode dict directly to a compact string
-        json_payload = json.dumps(available_players)
-        
-        # Publish the results back out to your matrix display panel hardware natively
-        await ha_mqtt.async_publish(hass, reply_atvs_topic, json_payload, qos=0, retain=True)
-        _LOGGER.debug(f"Matrix reply dispatched to {reply_atvs_topic}: {json_payload}")
+        await ha_mqtt.async_publish(hass, reply_atvs_topic, json.dumps(available_players), qos=0, retain=True)
 
-    # Bind both topic hooks cleanly using the native loop pipeline
+    # Attach network topic handlers
     await ha_mqtt.async_subscribe(hass, control_topic, async_mqtt_message_handler)
     await ha_mqtt.async_subscribe(hass, get_atvs_topic, async_mqtt_get_players_handler)
 
