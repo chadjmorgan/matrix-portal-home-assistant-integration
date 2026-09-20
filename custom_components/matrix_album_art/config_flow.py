@@ -52,30 +52,29 @@ class MatrixConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class MatrixOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle updating options via the front-end Configure button."""
 
-    # Note: Explicit __init__ constructor removed entirely to comply with new core specifications
-
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Manage the configuration modifications requested by the user."""
         if user_input is not None:
-            # Sync options flow alterations with the base configuration entry dictionary
             new_data = {**self.config_entry.data, **user_input}
             self.hass.config_entries.async_update_entry(self.config_entry, data=new_data)
             return self.async_create_entry(title="", data=user_input)
 
-        # Safely pull the active parameters from config_entry properties
-        current_broker = self.config_entry.options.get(
-            "mqtt_broker", self.config_entry.data.get("mqtt_broker", "")
-        )
-        current_topic = self.config_entry.options.get(
-            "mqtt_topic", self.config_entry.data.get("mqtt_topic", "appletv/matrix/album_art")
-        )
+        # Pull existing parameters safely with fallback defaults
+        current_broker = self.config_entry.options.get("mqtt_broker", self.config_entry.data.get("mqtt_broker", ""))
+        current_topic = self.config_entry.options.get("mqtt_topic", self.config_entry.data.get("mqtt_topic", "appletv/matrix/album_art"))
+        current_saturation = self.config_entry.options.get("color_saturation", self.config_entry.data.get("color_saturation", 1.0))
+        current_contrast = self.config_entry.options.get("contrast", self.config_entry.data.get("contrast", 1.0))
+        current_brightness = self.config_entry.options.get("brightness", self.config_entry.data.get("brightness", 1.0))
 
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
                 vol.Required("mqtt_broker", default=str(current_broker)): str,
                 vol.Required("mqtt_topic", default=str(current_topic)): str,
+                vol.Optional("color_saturation", default=float(current_saturation)): vol.Coerce(float),
+                vol.Optional("contrast", default=float(current_contrast)): vol.Coerce(float),
+                vol.Optional("brightness", default=float(current_brightness)): vol.Coerce(float),
             }),
         )

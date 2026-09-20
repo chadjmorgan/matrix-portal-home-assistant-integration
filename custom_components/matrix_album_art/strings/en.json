@@ -10,5 +10,20 @@
         }
       }
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Adjust Matrix Settings",
+        "description": "Tune your connection settings and tweak image enhancements to make colors pop on pixel arrays (1.0 is default original value).",
+        "data": {
+          "mqtt_broker": "MQTT Broker IP Address",
+          "mqtt_topic": "MQTT Topic Destination",
+          "color_saturation": "Color Saturation Multiplier (e.g. 1.4)",
+          "contrast": "Contrast Multiplier (e.g. 1.2)",
+          "brightness": "Brightness Multiplier (e.g. 1.0)"
+        }
+      }
+    }
   }
 }
