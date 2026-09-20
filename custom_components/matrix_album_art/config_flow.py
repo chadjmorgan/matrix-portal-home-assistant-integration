@@ -46,7 +46,7 @@ class MatrixConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         config_entry: config_entries.ConfigEntry,
     ) -> MatrixOptionsFlowHandler:
         """Link the configuration to the active Options Flow handler."""
-        return MatrixOptionsFlowHandler(config_entry)
+        return MatrixOptionsFlowHandler()
 
 
 class MatrixOptionsFlowHandler(config_entries.OptionsFlow):
