@@ -1,0 +1,30 @@
+blueprint:
+  name: Sync Media Player Album Art to Pixel Matrix
+  description: Automatically extracts, resizes, and transmits target album artwork to your custom display matrix via MQTT whenever the track changes.
+  domain: automation
+  input:
+    target_media_player:
+      name: Media Player
+      description: Choose the player you want to track (e.g., Apple TV).
+      selector:
+        entity:
+          filter:
+            - domain: media_player
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: state
+    entity_id: !input target_media_player
+    attribute: entity_picture
+
+condition:
+  # Only trigger if the media player actually has artwork available right now
+  - condition: template
+    value_template: "{{ state_attr(trigger.entity_id, 'entity_picture') != none }}"
+
+action:
+  - action: matrix_album_art.send_album_art
+    data:
+      image_path: "{{ state_attr(trigger.entity_id, 'entity_picture') }}"
