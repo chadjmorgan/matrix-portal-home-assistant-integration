@@ -3,9 +3,9 @@
   "name": "Matrix Album Art Companion",
   "codeowners": ["@cjmchad"],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": ["mqtt"],
   "documentation": "https://github.com/chadjmorgan/matrix-portal-home-assistant-integration/blob/main/README.md",
   "iot_class": "local_push",
-  "requirements": ["pillow", "paho-mqtt"],
+  "requirements": ["pillow"],
   "version": "1.0.1"
 }

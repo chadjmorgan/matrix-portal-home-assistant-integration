@@ -14,8 +14,6 @@ from homeassistant.components import mqtt as ha_mqtt
 
 import aiohttp
 from PIL import Image, ImageEnhance  # Added ImageEnhance
-import paho.mqtt.publish as publish
-import paho.mqtt.client as paho_client
 
 from .const import DOMAIN
 
@@ -25,6 +23,10 @@ TRACKER_DATA_KEY = f"{DOMAIN}_unsub_listener"
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up the integration from a UI config entry."""
+    
+    if "mqtt" not in hass.config.components:
+        _LOGGER.error("Matrix failure: Core Home Assistant MQTT integration is missing or unconfigured. Please add it first via Settings -> Devices & Services.")
+        return False
     
     mqtt_broker = entry.options.get("mqtt_broker", entry.data.get("mqtt_broker"))
     mqtt_topic = entry.options.get("mqtt_topic", entry.data.get("mqtt_topic", "appletv/matrix/album_art"))
@@ -90,11 +92,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             payload_bytes = await hass.async_add_executor_job(process_image)
 
-            def mqtt_publish_worker():
-                publish.single(
-                    topic=mqtt_topic, payload=payload_bytes, qos=0, retain=False,
-                    hostname=mqtt_broker, port=1883, protocol=paho_client.MQTTv311
-                )
+            await ha_mqtt.async_publish(hass, mqtt_topic, payload_bytes, qos=0, retain=False)
+            _LOGGER.warning(f"Matrix SUCCESS: Published {len(payload_bytes)} bytes natively via Home Assistant MQTT!")
 
             await hass.async_add_executor_job(mqtt_publish_worker)
             _LOGGER.warning(f"Matrix Stream Success! {len(payload_bytes)} bytes sent.")
