@@ -1,0 +1,14 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Matrix Display Setup",
+        "description": "Provide the configuration details for your custom LED album art display companion.",
+        "data": {
+          "mqtt_broker": "MQTT Broker IP Address",
+          "mqtt_topic": "MQTT Topic Destination"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+stages:
+  - lint
+  - validate
+
+# 1. Run Home Assistant's official component validation engine
+hassfest_validation:
+  stage: lint
+  image:
+    name: ghcr.io/home-assistant/hassfest:latest
+    entrypoint: [""]
+  script:
+    # hassfest needs to run from the directory containing your custom_components folder
+    - python3 -m hassfest --action validate
+
+# 2. Catch formatting and structure mistakes in your repository configuration
+hacs_validation:
+  stage: validate
+  image: 
+    name: python:3.11-slim
+  before_script:
+    - pip install pyyaml
+  script:
+    # Basic check to ensure required companion files exist
+    - |
+      if [ ! -f "hacs.json" ]; then
+        echo "ERROR: hacs.json is missing from the repository root!"
+        exit 1
+      fi
+    # Quick sanity check on json syntax
+    - python3 -m json.tool hacs.json
+    - python3 -m json.tool custom_components/matrix_album_art/manifest.json
+    - python3 -m json.tool custom_components/matrix_album_art/strings/en.json
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

@@ -1,0 +1,11 @@
+{
+  "domain": "matrix_album_art",
+  "name": "Matrix Portal Home Assistant Integration",
+  "codeowners": ["@cjm"],
+  "dependencies": [],
+  "documentation": "https://chadjmorgan.com",
+  "iot_class": "local_push",
+  "version": "1.0.0",
+  "config_flow": true,
+  "requirements": ["pillow==10.3.0", "paho-mqtt==1.6.1"]
+}
