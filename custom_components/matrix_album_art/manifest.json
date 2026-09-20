@@ -1,7 +1,7 @@
 {
   "domain": "matrix_album_art",
   "name": "Matrix Portal Home Assistant Integration",
-  "codeowners": ["@cjm"],
+  "codeowners": ["@cjmchad"],
   "dependencies": [],
   "documentation": "https://chadjmorgan.com",
   "iot_class": "local_push",
