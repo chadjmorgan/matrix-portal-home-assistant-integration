@@ -52,10 +52,7 @@ class MatrixConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class MatrixOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle updating options via the front-end Configure button."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        # Use super() to let Home Assistant safely assign the config_entry property natively
-        super().__init__(config_entry)
+    # Note: Explicit __init__ constructor removed entirely to comply with new core specifications
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
