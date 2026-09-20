@@ -1,0 +1,11 @@
+send_album_art:
+  name: Send Album Art to Matrix
+  description: Downloads, scales, and streams an image path to your pixel matrix via MQTT.
+  fields:
+    image_path:
+      name: Image URL or Path
+      description: The internal entity_picture path, a local cache string, or an external HTTP web address.
+      required: true
+      example: /api/media_player_proxy/media_player.apple_tv...
+      selector:
+        text:
