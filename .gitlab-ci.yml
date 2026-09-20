@@ -9,8 +9,8 @@ hassfest_validation:
     name: ghcr.io/home-assistant/hassfest:latest
     entrypoint: [""]
   script:
-    # hassfest needs to run from the directory containing your custom_components folder
-    - hassfest --action validate
+    - cd /usr/src/homeassistant
+    - python3 -m script.hassfest --action validate --integration-path "$CI_PROJECT_DIR/custom_components/matrix_album_art"
 
 # 2. Catch formatting and structure mistakes in your repository configuration
 hacs_validation:
