@@ -170,11 +170,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         available_players = {}
         all_states = hass.states.async_all()
         
+        # Fetch the entity registry to see which integration owns the media_player
+        entity_reg = await hass.helpers.entity_registry.async_get_registry()
+        
         for state in all_states:
             if state.entity_id.startswith("media_player."):
-                slug = state.entity_id.split(".")[1]
-                friendly_name = state.attributes.get("friendly_name", slug)
-                available_players[slug] = friendly_name
+                entry = entity_reg.async_get(state.entity_id)
+                
+                is_apple_tv = False
+                if entry and entry.platform == "apple_tv":
+                    is_apple_tv = True
+                else:
+                    # 2. Fallback check: Look at naming conventions if registry lookup isn't enough
+                    slug = state.entity_id.split(".")[1]
+                    if "apple_tv" in slug or "appletv" in slug:
+                        is_apple_tv = True
+
+                # If it's an Apple TV, add it to the payload
+                if is_apple_tv:
+                    slug = state.entity_id.split(".")[1]
+                    friendly_name = state.attributes.get("friendly_name", slug)
+                    available_players[slug] = friendly_name
 
         await ha_mqtt.async_publish(hass, reply_atvs_topic, json.dumps(available_players), qos=0, retain=True)
 
